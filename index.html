@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Status Dashboard</title>
+    <!-- jsPDF Library for PDF Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        /* [Previous styles remain unchanged] */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- [Previous login, OTP, recovery, registration sections remain unchanged] -->
+
+        <!-- Dashboard Section -->
+        <div id="dashboard-section" class="hidden">
+            <h1>Finance Status Dashboard</h1>
+            <p>Track client payments and remaining amounts.</p>
+            
+            <h2>Add Entry</h2>
+            <form id="entry-form">
+                <input type="text" id="name" placeholder="Client Name (e.g., Manikanta)" required>
+                <input type="number" id="initial-amount" placeholder="Initial Amount" required>
+                <input type="number" id="daily-payment" placeholder="Daily Payment (e.g., 500)" required>
+                <input type="date" id="start-date" required>
+                <button type="submit">Add</button>
+            </form>
+
+            <h2>Entries</h2>
+            <div class="filter-section">
+                <select id="filter-type">
+                    <option value="all">All Entries</option>
+                    <option value="daily">Daily</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="client">By Client</option>
+                </select>
+                <input type="date" id="filter-date" class="hidden">
+                <input type="month" id="filter-month" class="hidden">
+                <input type="text" id="filter-client" placeholder="Enter Client Name" class="hidden">
+            </div>
+            <table id="entries-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Initial Amount</th>
+                        <th>Daily Payment</th>
+                        <th>Start Date</th>
+                        <th>Remaining Amount</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <div id="total">Total Remaining: 0</div>
+
+            <div class="download-section">
+                <button id="download-pdf" class="pdf-btn">Download PDF</button>
+                <button id="download-csv" class="csv-btn">Download CSV</button>
+            </div>
+
+            <button id="logout">Logout</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // [Previous user, OTP, and login logic remain unchanged]
+
+            const entryForm = document.getElementById('entry-form');
+            const entriesTableBody = document.querySelector('#entries-table tbody');
+            const totalElement = document.getElementById('total');
+            const logoutButton = document.getElementById('logout');
+            const filterType = document.getElementById('filter-type');
+            const filterDate = document.getElementById('filter-date');
+            const filterMonth = document.getElementById('filter-month');
+            const filterClient = document.getElementById('filter-client');
+            const downloadPdfButton = document.getElementById('download-pdf');
+            const downloadCsvButton = document.getElementById('download-csv');
+
+            let entries = [];
+            let total = 0;
+
+            function saveEntries() {
+                if (currentEmail) {
+                    localStorage.setItem(`financeEntries_${currentEmail}`, JSON.stringify(entries));
+                }
+            }
+
+            function loadEntries() {
+                if (currentEmail) {
+                    const savedEntries = localStorage.getItem(`financeEntries_${currentEmail}`);
+                    entries = savedEntries ? JSON.parse(savedEntries) : [];
+                    renderEntries(entries);
+                }
+            }
+
+            function calculateRemainingAmount(initialAmount, dailyPayment, startDate) {
+                const start = new Date(startDate);
+                const today = new Date('2025-10-20T13:24:00Z'); // Fixed to current date and time
+                const daysElapsed = Math.floor((today - start) / (1000 * 60 * 60 * 24));
+                const totalPaid = daysElapsed * dailyPayment;
+                const remaining = initialAmount - totalPaid;
+                return remaining > 0 ? remaining : 0;
+            }
+
+            function renderEntries(entriesToRender) {
+                const filter = filterType.value;
+                let filteredEntries = entriesToRender;
+                total = 0;
+
+                if (filter === 'daily' && filterDate.value) {
+                    filteredEntries = entries.filter(entry => {
+                        const entryDate = new Date(entry.startDate);
+                        return entryDate.toISOString().split('T')[0] === filterDate.value;
+                    });
+                } else if (filter === 'monthly' && filterMonth.value) {
+                    const [year, month] = filterMonth.value.split('-');
+                    filteredEntries = entries.filter(entry => {
+                        const entryDate = new Date(entry.startDate);
+                        return entryDate.getFullYear() === parseInt(year) && 
+                               entryDate.getMonth() === parseInt(month) - 1;
+                    });
+                } else if (filter === 'client' && filterClient.value) {
+                    filteredEntries = entries.filter(entry => entry.name.toLowerCase().includes(filterClient.value.toLowerCase()));
+                }
+
+                entriesTableBody.innerHTML = '';
+                filteredEntries.forEach((entry, index) => {
+                    const remaining = calculateRemainingAmount(entry.initialAmount, entry.dailyPayment, entry.startDate);
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td>${entry.name}</td><td>${entry.initialAmount.toFixed(2)}</td><td>${entry.dailyPayment.toFixed(2)}</td><td>${entry.startDate}</td><td>${remaining.toFixed(2)}</td><td><button class="delete-btn" data-index="${index}">Delete</button></td>`;
+                    entriesTableBody.appendChild(row);
+                    total += remaining;
+                });
+
+                document.querySelectorAll('.delete-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const index = parseInt(e.target.getAttribute('data-index'));
+                        entries.splice(index, 1);
+                        saveEntries();
+                        renderEntries(entries);
+                        alert('Entry deleted successfully!');
+                    });
+                });
+
+                totalElement.textContent = `Total Remaining: ${total.toFixed(2)}`;
+            }
+
+            entryForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = document.getElementById('name').value;
+                const initialAmount = parseFloat(document.getElementById('initial-amount').value);
+                const dailyPayment = parseFloat(document.getElementById('daily-payment').value);
+                const startDate = document.getElementById('start-date').value;
+
+                console.log('Form Data:', { name, initialAmount, dailyPayment, startDate }); // Debug log
+                if (name && !isNaN(initialAmount) && !isNaN(dailyPayment) && startDate) {
+                    entries.push({ name, initialAmount, dailyPayment, startDate });
+                    saveEntries();
+                    renderEntries(entries);
+                    document.getElementById('name').value = '';
+                    document.getElementById('initial-amount').value = '';
+                    document.getElementById('daily-payment').value = '';
+                    document.getElementById('start-date').value = '';
+                    alert('Entry added successfully!');
+                } else {
+                    alert('Please fill all fields with valid data');
+                }
+            });
+
+            filterType.addEventListener('change', (e) => {
+                filterDate.classList.add('hidden');
+                filterMonth.classList.add('hidden');
+                filterClient.classList.add('hidden');
+                
+                if (e.target.value === 'daily') filterDate.classList.remove('hidden');
+                else if (e.target.value === 'monthly') filterMonth.classList.remove('hidden');
+                else if (e.target.value === 'client') filterClient.classList.remove('hidden');
+                
+                renderEntries(entries);
+            });
+
+            filterDate.addEventListener('change', () => renderEntries(entries));
+            filterMonth.addEventListener('change', () => renderEntries(entries));
+            filterClient.addEventListener('input', () => renderEntries(entries));
+
+            // [Previous CSV and PDF download logic remain unchanged]
+
+            logoutButton.addEventListener('click', () => {
+                dashboardSection.classList.add('hidden');
+                loginSection.classList.remove('hidden');
+                currentEmail = null;
+                currentOTP = null;
+                filterType.value = 'all';
+                filterDate.classList.add('hidden');
+                filterMonth.classList.add('hidden');
+                filterClient.classList.add('hidden');
+                totalElement.textContent = 'Total Remaining: 0';
+            });
+        });
+
+        // [Previous login, OTP, recovery, registration event listeners remain unchanged]
+    </script>
+</body>
+</html>
